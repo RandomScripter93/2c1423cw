@@ -1,19 +1,204 @@
-wait(0.5)local ba=Instance.new("ScreenGui")
-local ca=Instance.new("TextLabel")local da=Instance.new("Frame")
-local _b=Instance.new("TextLabel")local ab=Instance.new("TextLabel")ba.Parent=game.CoreGui
-ba.ZIndexBehavior=Enum.ZIndexBehavior.Sibling;ca.Parent=ba;ca.Active=true
-ca.BackgroundColor3=Color3.new(0.176471,0.176471,0.176471)ca.Draggable=true
-ca.Position=UDim2.new(0.698610067,0,0.098096624,0)ca.Size=UDim2.new(0,370,0,52)
-ca.Font=Enum.Font.SourceSansSemibold;ca.Text="Anti AFK Script"ca.TextColor3=Color3.new(0,1,1)
-ca.TextSize=22;da.Parent=ca
-da.BackgroundColor3=Color3.new(0.196078,0.196078,0.196078)da.Position=UDim2.new(0,0,1.0192306,0)
-da.Size=UDim2.new(0,370,0,107)_b.Parent=da
-_b.BackgroundColor3=Color3.new(0.176471,0.176471,0.176471)_b.Position=UDim2.new(0,0,0.800455689,0)
-_b.Size=UDim2.new(0,370,0,21)_b.Font=Enum.Font.Arial;_b.Text="made by TroysXSploit on YT "
-_b.TextColor3=Color3.new(0,1,1)_b.TextSize=20;ab.Parent=da
-ab.BackgroundColor3=Color3.new(0.176471,0.176471,0.176471)ab.Position=UDim2.new(0,0,0.158377,0)
-ab.Size=UDim2.new(0,370,0,44)ab.Font=Enum.Font.ArialBold;ab.Text="Status: Active"
-ab.TextColor3=Color3.new(0,1,1)ab.TextSize=20;local bb=game:service'VirtualUser'
-game:service'Players'.LocalPlayer.Idled:connect(function()
-bb:CaptureController()bb:ClickButton2(Vector2.new())
-ab.Text="Roblox tried to kick u but i kicked him instead"wait(2)ab.Text="Status : Active"end)
+-- Nocturne external GIF module
+-- Loaded by the main Nocturne script with loadstring(game:HttpGet(...))().
+-- Keep GIF-heavy data and animation helpers here instead of bloating the main player file.
+
+local module = rawget(_G, "NocturneGIFs")
+if type(module) ~= "table" then
+    module = {}
+    _G.NocturneGIFs = module
+end
+
+module.version = "external-gifs-v1"
+module.registry = module.registry or {}
+module.running = module.running or {}
+module.assetCache = module.assetCache or {}
+
+local Services = {
+    RunService = game:GetService("RunService"),
+    ContentProvider = game:GetService("ContentProvider"),
+}
+
+local function safeString(value)
+    local ok, result = pcall(function()
+        return tostring(value)
+    end)
+    return ok and result or ""
+end
+
+local function canWriteFiles()
+    return type(writefile) == "function" and type(makefolder) == "function" and type(isfolder) == "function"
+end
+
+local function canReadFiles()
+    return type(isfile) == "function" and type(readfile) == "function"
+end
+
+local function ensureFolder(folder)
+    if not canWriteFiles() then
+        return false
+    end
+    pcall(function()
+        if not isfolder(folder) then
+            makefolder(folder)
+        end
+    end)
+    return true
+end
+
+local function getAsset(path)
+    if not path or path == "" then
+        return ""
+    end
+    if type(getcustomasset) == "function" then
+        local ok, asset = pcall(getcustomasset, path)
+        if ok then return asset end
+    end
+    if type(getsynasset) == "function" then
+        local ok, asset = pcall(getsynasset, path)
+        if ok then return asset end
+    end
+    return ""
+end
+
+function module.register(name, spec)
+    if type(name) ~= "string" or name == "" or type(spec) ~= "table" then
+        return false
+    end
+    module.registry[name] = spec
+    return true
+end
+
+function module.stop(imageLabel, aliveAttr)
+    if imageLabel then
+        imageLabel:SetAttribute(aliveAttr or "NocturneExternalGifAlive", false)
+    end
+end
+
+function module.materializeAsset(name, spec)
+    if type(spec) ~= "table" then
+        return ""
+    end
+    if spec.image and spec.image ~= "" then
+        return spec.image
+    end
+    if module.assetCache[name] then
+        return module.assetCache[name]
+    end
+    if not spec.file or not spec.data then
+        return ""
+    end
+    if not canWriteFiles() then
+        return ""
+    end
+
+    ensureFolder("Nocturne")
+    ensureFolder("Nocturne/ui")
+
+    local versionPath = spec.file .. ".version.txt"
+    local shouldWrite = true
+    if canReadFiles() and isfile(spec.file) and isfile(versionPath) then
+        local ok, existingVersion = pcall(readfile, versionPath)
+        shouldWrite = not ok or existingVersion ~= safeString(spec.version or "")
+    end
+    if shouldWrite then
+        pcall(writefile, spec.file, spec.data)
+        pcall(writefile, versionPath, safeString(spec.version or ""))
+    end
+
+    local asset = getAsset(spec.file)
+    module.assetCache[name] = asset
+    return asset
+end
+
+function module.playAtlas(imageLabel, name, aliveAttr)
+    local spec = module.registry[name]
+    if not imageLabel or not imageLabel.Parent or type(spec) ~= "table" then
+        return false
+    end
+
+    local asset = module.materializeAsset(name, spec)
+    if not asset or asset == "" then
+        imageLabel.Visible = false
+        return false
+    end
+
+    aliveAttr = aliveAttr or ("NocturneExternalGif_" .. name)
+    local tokenAttr = aliveAttr .. "Token"
+    local token = safeString(os.clock()) .. ":" .. safeString(math.random(1, 1000000))
+
+    local frameW = tonumber(spec.frameW) or 100
+    local frameH = tonumber(spec.frameH) or 100
+    local cols = math.max(1, tonumber(spec.cols) or 1)
+    local frames = math.max(1, tonumber(spec.frames) or 1)
+    local delay = tonumber(spec.delay) or 0.08
+
+    imageLabel:SetAttribute(aliveAttr, true)
+    imageLabel:SetAttribute(tokenAttr, token)
+    imageLabel.BackgroundTransparency = 1
+    imageLabel.BorderSizePixel = 0
+    imageLabel.Image = asset
+    imageLabel.ImageRectSize = Vector2.new(frameW, frameH)
+    imageLabel.ImageRectOffset = Vector2.new(0, 0)
+    imageLabel.ImageTransparency = 0
+    imageLabel.Visible = true
+
+    task.spawn(function()
+        pcall(function()
+            Services.ContentProvider:PreloadAsync({ imageLabel })
+        end)
+        pcall(function()
+            Services.RunService.RenderStepped:Wait()
+        end)
+
+        local frame = 1
+        while imageLabel
+            and imageLabel.Parent
+            and imageLabel:GetAttribute(aliveAttr) == true
+            and imageLabel:GetAttribute(tokenAttr) == token
+        do
+            local index = frame - 1
+            imageLabel.ImageRectOffset = Vector2.new((index % cols) * frameW, math.floor(index / cols) * frameH)
+            local d = delay
+            if type(spec.delays) == "table" and spec.delays[frame] then
+                d = tonumber(spec.delays[frame]) or d
+            end
+            task.wait(math.clamp(d, 0.025, 0.25))
+            frame += 1
+            if frame > frames then
+                frame = 1
+            end
+        end
+    end)
+
+    return true
+end
+
+function module.play(imageLabel, name, aliveAttr)
+    return module.playAtlas(imageLabel, name, aliveAttr)
+end
+
+function module.warm(parent, name)
+    local spec = module.registry[name]
+    if not parent or type(spec) ~= "table" then
+        return false
+    end
+    local warm = Instance.new("ImageLabel")
+    warm.Name = "NocturneExternalGifWarmup"
+    warm.Size = UDim2.fromOffset(tonumber(spec.frameW) or 100, tonumber(spec.frameH) or 100)
+    warm.Position = UDim2.fromOffset(-20000, -20000)
+    warm.BackgroundTransparency = 1
+    warm.BorderSizePixel = 0
+    warm.Parent = parent
+    local ok = module.playAtlas(warm, name, "NocturneExternalGifWarm_" .. name)
+    task.delay(3, function()
+        if warm and warm.Parent then
+            warm:Destroy()
+        end
+    end)
+    return ok
+end
+
+-- GIF data is intentionally registered below this line in future edits.
+-- The main script should only depend on module.play/module.warm/module.register.
+
+return module
